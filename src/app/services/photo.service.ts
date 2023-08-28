@@ -24,6 +24,14 @@ export class PhotoService {
   public async loadSaved() {
     const { value } = await Preferences.get({ key: this.PHOTO_STORAGE });
     this.photos = (value ? JSON.parse(value) : []) as UserPhoto[];
+
+    for (let photo of this.photos) {
+      const readFile = await Filesystem.readFile({
+        path: photo.filepath,
+        directory: Directory.Data,
+      });
+      photo.webviewPath = `data:image/jpeg;base64, ${readFile.data}`;
+    }
   }
 
   private async savePicture(photo: Photo) {
