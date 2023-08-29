@@ -12,6 +12,9 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Preferences } from '@capacitor/preferences';
 import { UserPhoto } from '../interfaces/user-photo';
 
+import { Platform } from '@ionic/angular';
+import { Capacitor } from '@capacitor/core';
+
 @Injectable({
   providedIn: 'root',
 })
@@ -19,18 +22,21 @@ export class PhotoService {
   public photos: UserPhoto[] = [];
   private PHOTO_STORAGE = 'photos';
 
-  constructor() {}
+  constructor(private plataform: Platform) {}
 
   public async loadSaved() {
     const { value } = await Preferences.get({ key: this.PHOTO_STORAGE });
     this.photos = (value ? JSON.parse(value) : []) as UserPhoto[];
 
-    for (let photo of this.photos) {
-      const readFile = await Filesystem.readFile({
-        path: photo.filepath,
-        directory: Directory.Data,
-      });
-      photo.webviewPath = `data:image/jpeg;base64, ${readFile.data}`;
+    // mobile não precisa converter para base64, do jeito que vem do file system é possivel exibir
+    if (!this.plataform.is('hybrid')) {
+      for (let photo of this.photos) {
+        const readFile = await Filesystem.readFile({
+          path: photo.filepath,
+          directory: Directory.Data,
+        });
+        photo.webviewPath = `data:image/jpeg;base64, ${readFile.data}`;
+      }
     }
   }
 
@@ -43,10 +49,11 @@ export class PhotoService {
       data: base64Data,
       directory: Directory.Data,
     });
-
     return {
       filepath: fileName,
-      webviewPath: photo.webPath,
+      webviewPath: this.plataform.is('hybrid')
+        ? Capacitor.convertFileSrc(savedFile.uri)
+        : photo.webPath,
     } as UserPhoto;
   }
 
@@ -67,9 +74,16 @@ export class PhotoService {
   }
 
   private async readAsBase64(photo: Photo) {
-    const response = await fetch(photo.webPath!);
-    const blob = await response.blob();
-    return (await this.convertBlobToBase64(blob)) as string;
+    if (this.plataform.is('hybrid')) {
+      const file = await Filesystem.readFile({
+        path: photo.path!,
+      });
+      return file.data;
+    } else {
+      const response = await fetch(photo.webPath!);
+      const blob = await response.blob();
+      return (await this.convertBlobToBase64(blob)) as string;
+    }
   }
 
   private convertBlobToBase64 = (blob: Blob) =>
